@@ -2,19 +2,29 @@
 #include <rclcpp/rclcpp.hpp>
 #include <px4_msgs/msg/vehicle_local_position.hpp>
 #include <px4_msgs/msg/vehicle_command.hpp>
+#include <px4_msgs/msg/vehicle_land_detected.hpp>
 
 using namespace std::chrono_literals;
 
 class ForceLand : public rclcpp::Node
 {
 	public:
-	ForceLand() : Node("force_land"), need_land(false)
+	ForceLand() : Node("force_land"), need_land(false), landing_triggered(false)
 	{
 		rmw_qos_profile_t qos_profile = rmw_qos_profile_sensor_data;
 		auto qos = rclcpp::QoS(rclcpp::QoSInitialization(qos_profile.history, 5), qos_profile);
 
 		subscription_ = this->create_subscription<px4_msgs::msg::VehicleLocalPosition>("/fmu/out/vehicle_local_position",
 		qos, std::bind(&ForceLand::height_callback, this, std::placeholders::_1));
+        
+		land_subscription_ =
+			this->create_subscription<px4_msgs::msg::VehicleLandDetected>(
+				"/fmu/out/vehicle_land_detected",
+				qos,
+				std::bind(&ForceLand::land_callback, this, std::placeholders::_1));
+
+
+
 		publisher_ = this->create_publisher<px4_msgs::msg::VehicleCommand>("/fmu/in/vehicle_command", 10);
 
 		timer_ = this->create_wall_timer(10ms, std::bind(&ForceLand::activate_switch, this));
@@ -22,23 +32,43 @@ class ForceLand : public rclcpp::Node
 
 	private:
 	rclcpp::Subscription<px4_msgs::msg::VehicleLocalPosition>::SharedPtr subscription_;
+
+
+    rclcpp::Subscription<px4_msgs::msg::VehicleLandDetected>::SharedPtr land_subscription_;
+
 	rclcpp::Publisher<px4_msgs::msg::VehicleCommand>::SharedPtr publisher_;
 
 	rclcpp::TimerBase::SharedPtr timer_;
 
 	bool need_land;
+	bool landing_triggered;
 
 	void height_callback(const px4_msgs::msg::VehicleLocalPosition::UniquePtr msg) 
 	{
 		float z_ = -msg->z;
 		std::cout << "Current drone height: " << z_ << " meters" <<  std::endl;
-		if(z_ > 20)
+		if(z_ > 20.0f && !landing_triggered)
 		{
 			need_land = true;
+	        landing_triggered = true;
 		}
 
 		return;
 	}
+
+
+    void land_callback(const px4_msgs::msg::VehicleLandDetected::UniquePtr msg)
+	{
+		if(msg->landed && landing_triggered)
+		{
+			landing_triggered = false;
+
+			std::cout << "Vehicle landed. Force-land trigger enabled again."
+					<< std::endl;
+		}
+	}
+
+
 
 	void activate_switch()
 	{

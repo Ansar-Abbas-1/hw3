@@ -1,0 +1,21 @@
+# ROS 2 / colcon generated directories
+build/
+install/
+log/
+
+# Local PX4 build output
+src/PX4-Autopilot/build/
+
+# Local Q1 backup
+src/PX4-Autopilot-Q1-backup/
+
+# Python generated files
+__pycache__/
+*.pyc
+*.pyo
+
+# Editor / temporary files
+*.swp
+*.swo
+*~
+.DS_Store
