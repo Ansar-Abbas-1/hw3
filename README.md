@@ -1,30 +1,50 @@
 ## 📌 Homework Branches
 
-The different parts of the homework are organized in separate Git branches.
+The homework is organized into separate Git branches. **Before following the README instructions for any question, first switch to the corresponding branch.** Each branch contains the files and modifications required for that specific question.
 
-**Question 1 (Q1) is available in the `main` branch.**
+### Question 1 — `main` Branch
 
-To test or verify another part of the homework, first switch to the corresponding branch before building or running the simulation. This is important because each branch may contain different PX4 models, airframe configurations, ROS 2 packages, or source-code modifications.
+First switch to the `main` branch:
 
-For example:
-
-
-# Question 1
 ```bash
 git switch main
 ```
 
-# Question 2
+Then follow the **Question 1** section of the README.
+
+This branch contains the custom `x100` UAV model, custom airframe configuration, PX4 modifications, and the setup required for Question 1.
+
+---
+
+### Question 2 — `q2` Branch
+
+First switch to the `q2` branch:
+
 ```bash
 git switch q2
 ```
 
-# Question 3
+Then follow the **Question 2** section of the README.
+
+This branch contains the `force_land` ROS 2 node used to trigger landing when the UAV exceeds the specified altitude threshold and to reset the trigger only after the vehicle has actually landed.
+
+---
+
+### Question 3 — `q3` Branch
+
+First switch to the `q3` branch:
+
 ```bash
 git switch q3
 ```
 
-# Homework 3 — Question 1: Custom x100 Quadrotor
+Then follow the **Question 3** section of the README.
+
+This branch contains the `trajectory_planner` ROS 2 node for executing the multi-waypoint trajectory using PX4 Offboard mode.
+
+> **Important:** Always switch to the required branch first and then follow the README instructions for that question. Build and simulation commands should be executed only after switching to the correct branch.
+
+# Question 1: Custom x100 Quadrotor
 
 This branch contains the files required to reproduce **Question 1 (Q1)** using PX4 SITL, Gazebo Harmonic, ROS 2 Humble, and QGroundControl.
 
@@ -367,7 +387,7 @@ output[2]
 output[3]
 ```
 
-# 🛬 Homework 3 – Question 2: Force-Landing Trigger
+# 🛬Question 2: Force-Landing Trigger
 
 This branch contains **Question 2 (Q2)** of Homework 3.
 
@@ -631,3 +651,203 @@ Altitude_ENU
 - QGroundControl runs on the HOST.
 - PX4, Gazebo, DDS, ROS 2, and PlotJuggler run inside Docker.
 - Always select the repository root as the Docker workspace.
+
+
+
+# Question 3 – Trajectory Planning in Offboard Mode
+
+A ROS 2 node named `trajectory_planner` is implemented in the `offboard_rl` package. It generates a smooth multi-waypoint trajectory and sends the trajectory setpoints to PX4 in Offboard mode.
+
+The planner uses the current UAV position as the starting point and generates a trajectory through 8 additional waypoints. Non-zero velocities are used at the intermediate waypoints so that the UAV does not stop between trajectory segments. The final waypoint has zero velocity and acceleration.
+
+## Requirements
+
+
+- ROS 2 Humble
+- PX4 SITL
+- Gazebo Harmonic
+- Micro XRCE-DDS Agent
+- QGroundControl
+- PlotJuggler
+- Docker environment
+The repository/workspace root must be mounted in the Docker container as:
+
+```bash
+/home/user/ros2_ws
+```
+
+## Build
+
+Start the Docker container from a host terminal:
+
+```bash
+cd ~/aerial_harmonic_fold/ros2_docker_scripts
+./docker_run_container.sh
+```
+
+Inside the Docker container, build the required ROS 2 packages:
+
+```bash
+cd /home/user/ros2_ws
+
+source /opt/ros/humble/setup.bash
+
+colcon build --packages-select px4_msgs
+source install/setup.bash
+
+colcon build --packages-select offboard_rl
+source install/setup.bash
+```
+
+Verify that the trajectory planner executable is available:
+
+```bash
+ros2 pkg executables offboard_rl
+```
+
+The output should include:
+
+```text
+offboard_rl go_to_point
+offboard_rl trajectory_planner
+```
+
+## Run the Simulation
+
+The simulation requires separate terminals for PX4/Gazebo, the Micro XRCE-DDS Agent, and the trajectory planner.
+
+### Terminal 1 – PX4 SITL and Gazebo
+
+Start the Docker container:
+
+```bash
+cd ~/aerial_harmonic_fold/ros2_docker_scripts
+./docker_run_container.sh
+```
+
+Inside Docker:
+
+```bash
+cd /home/user/ros2_ws/src/PX4-Autopilot
+make px4_sitl gz_x500
+```
+
+Wait until PX4 and Gazebo are fully started.
+
+### Terminal 2 – Micro XRCE-DDS Agent
+
+On the host:
+
+```bash
+cd ~/aerial_harmonic_fold/ros2_docker_scripts
+./docker_connect.sh
+```
+
+Inside Docker:
+
+```bash
+cd /home/user/ros2_ws
+./DDS_run.sh
+```
+
+The DDS Agent uses UDP port `8888`.
+
+### Terminal 3 – Trajectory Planner
+
+On the host:
+
+```bash
+cd ~/aerial_harmonic_fold/ros2_docker_scripts
+./docker_connect.sh
+```
+
+Inside Docker:
+
+```bash
+cd /home/user/ros2_ws
+
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+
+ros2 run offboard_rl trajectory_planner
+```
+
+The node waits for a valid PX4 local position, generates the trajectory, sends the Offboard keepalive messages, switches the vehicle to Offboard mode, arms it, and starts executing the trajectory.
+
+The planned trajectory contains 8 segments of 3 seconds each, giving a total trajectory duration of approximately 24 seconds.
+
+## Record Data
+
+To record the data required for the plots, open another Docker terminal and source the workspace:
+
+```bash
+cd /home/user/ros2_ws
+
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+```
+
+Create a directory for the Q3 bag:
+
+```bash
+mkdir -p /home/user/ros2_ws/videos_plots/q3
+cd /home/user/ros2_ws/videos_plots/q3
+```
+
+Record the required PX4 topics:
+
+```bash
+ros2 bag record \
+/fmu/out/vehicle_local_position \
+/fmu/out/vehicle_attitude
+```
+
+Start recording before running the trajectory planner and stop it with `Ctrl+C` after the trajectory has finished.
+
+## PlotJuggler
+
+Launch PlotJuggler inside Docker:
+
+```bash
+source /opt/ros/humble/setup.bash
+source /home/user/ros2_ws/install/setup.bash
+
+plotjuggler
+```
+
+Open the `metadata.yaml` file from the recorded ROS 2 bag directory.
+
+Use the following data for the required plots:
+
+- **XY trajectory:** plot `/fmu/out/vehicle_local_position/y` against `/fmu/out/vehicle_local_position/x` using an XY curve.
+- **Altitude:** use `/fmu/out/vehicle_local_position/z` and create a custom series with `-z` because PX4 uses the NED coordinate convention.
+- **Yaw:** calculate yaw from `/fmu/out/vehicle_attitude/q[0..3]`.
+- **Velocity:** plot `vx`, `vy`, and `vz` from `/fmu/out/vehicle_local_position`.
+- **Acceleration:** plot `ax`, `ay`, and `az` from `/fmu/out/vehicle_local_position`.
+
+For the yaw custom series, assign the quaternion inputs as:
+
+```text
+value = q[0]
+v2    = q[1]
+v3    = q[2]
+v4    = q[3]
+```
+
+and use the following Lua transformation in PlotJuggler:
+
+```lua
+return math.atan(
+    2 * (value * v4 + v2 * v3),
+    1 - 2 * (v3 * v3 + v4 * v4)
+)
+```
+
+For the XY trajectory, select `x` and `y` together and right-drag them into an empty plot. Set:
+
+```text
+X = /fmu/out/vehicle_local_position/x
+Y = /fmu/out/vehicle_local_position/y
+```
+
+Use the `1:1` aspect ratio option for the XY plot.
